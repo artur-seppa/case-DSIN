@@ -1,0 +1,18 @@
+{
+  "name": "DSIN",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cabeleleila Leila - sistema de agendamento online (case DSIN)",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter api start:dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "infra:up": "docker compose up -d postgres redis mailpit",
+    "infra:down": "docker compose down"
+  }
+}
