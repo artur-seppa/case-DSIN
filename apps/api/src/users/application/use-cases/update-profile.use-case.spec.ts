@@ -1,82 +1,32 @@
-import { FakeClock } from '../../../testing/fakes.js';
-import { makeUser } from '../../../testing/factories.js';
-import { InMemoryUserRepository } from '../../../testing/in-memory-user.repository.js';
-import { UserNotFoundException } from '../../domain/exceptions.js';
+import { makeUser } from '../../../testing/factories/user.factory.js';
+import { UserRepository } from '../../domain/user.repository.js';
 import { UpdateProfileUseCase } from './update-profile.use-case.js';
 
 function setup() {
-  const users = new InMemoryUserRepository();
-  const clock = new FakeClock();
-  const useCase = new UpdateProfileUseCase(users, clock);
-  return { users, clock, useCase };
+  const users = { update: vi.fn<UserRepository['update']>() };
+  const useCase = new UpdateProfileUseCase(users as unknown as UserRepository);
+  return { users, useCase };
 }
 
 describe('UpdateProfileUseCase', () => {
-  it('updates name and phone and refreshes updatedAt', async () => {
-    const { users, clock, useCase } = setup();
-    const user = makeUser({ name: 'Antigo', phone: null });
-    await users.insert(user);
-
-    const updated = await useCase.execute({
-      userId: user.id,
-      name: 'Novo Nome',
-      phone: '(11) 98888-7777',
-    });
-
-    expect(updated.name).toBe('Novo Nome');
-    expect(updated.phone).toBe('(11) 98888-7777');
-    expect(updated.updatedAt).toEqual(clock.now());
-    expect(users.items.get(user.id)?.name).toBe('Novo Nome');
-  });
-
-  it('keeps the fields that were not informed', async () => {
+  it('hands the changes to the repository and returns the updated user', async () => {
     const { users, useCase } = setup();
-    const user = makeUser({ name: 'Maria', phone: '123' });
-    await users.insert(user);
+    const user = makeUser({ name: 'Novo Nome', phone: '+5511988887777' });
+    users.update.mockResolvedValue(user);
+    const changes = { name: 'Novo Nome', phone: '+5511988887777' };
 
-    const updated = await useCase.execute({
-      userId: user.id,
-      name: 'Maria S.',
-    });
+    const updated = await useCase.execute(user.id, changes);
 
-    expect(updated.name).toBe('Maria S.');
-    expect(updated.phone).toBe('123');
-  });
-
-  it('clears the phone when null is informed', async () => {
-    const { users, useCase } = setup();
-    const user = makeUser({ phone: '123' });
-    await users.insert(user);
-
-    const updated = await useCase.execute({ userId: user.id, phone: null });
-
-    expect(updated.phone).toBeNull();
-  });
-
-  it('never changes email, role or password hash', async () => {
-    const { users, useCase } = setup();
-    const user = makeUser();
-    await users.insert(user);
-    const before = {
-      email: user.email,
-      role: user.role,
-      hash: user.passwordHash,
-    };
-
-    const updated = await useCase.execute({ userId: user.id, name: 'Outro' });
-
-    expect({
-      email: updated.email,
-      role: updated.role,
-      hash: updated.passwordHash,
-    }).toEqual(before);
+    expect(updated).toBe(user);
+    expect(users.update).toHaveBeenCalledExactlyOnceWith(user.id, changes);
   });
 
   it('fails when the user does not exist', async () => {
-    const { useCase } = setup();
+    const { users, useCase } = setup();
+    users.update.mockResolvedValue(null);
 
-    await expect(
-      useCase.execute({ userId: 'missing', name: 'X' }),
-    ).rejects.toBeInstanceOf(UserNotFoundException);
+    await expect(useCase.execute('missing', { name: 'X' })).rejects.toThrow(
+      'Usuário não encontrado',
+    );
   });
 });

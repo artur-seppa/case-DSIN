@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { IdGenerator } from '../../../shared/id/id-generator.js';
 import { Clock } from '../../../shared/time/clock.js';
 import type { User } from '../../../users/domain/user.entity.js';
 import { RefreshToken } from '../../domain/refresh-token.entity.js';
@@ -21,29 +20,27 @@ export class SessionIssuer {
     private readonly accessTokens: AccessTokenService,
     private readonly codec: RefreshTokenCodec,
     private readonly refreshTokens: RefreshTokenRepository,
-    private readonly ids: IdGenerator,
     private readonly clock: Clock,
     private readonly settings: AuthSettings,
   ) {}
 
   async issue(user: User, familyId?: string): Promise<Session> {
     const now = this.clock.now();
-    const { token, hash } = this.codec.generate();
+    const { token: rawToken, hash } = this.codec.generate();
     const expiresAt = new Date(
       now.getTime() + this.settings.refreshTokenTtlDays * 24 * 60 * 60_000,
     );
 
-    await this.refreshTokens.insert(
-      Object.assign(new RefreshToken(), {
-        id: this.ids.generate(),
-        userId: user.id,
-        familyId: familyId ?? this.ids.generate(),
-        tokenHash: hash,
-        expiresAt,
-        revokedAt: null,
-        createdAt: now,
-      }),
-    );
+    const token = Object.assign(new RefreshToken(), {
+      userId: user.id,
+      tokenHash: hash,
+      expiresAt,
+      revokedAt: null,
+    });
+    if (familyId) {
+      token.familyId = familyId;
+    }
+    await this.refreshTokens.insert(token);
 
     return {
       user,
@@ -51,7 +48,7 @@ export class SessionIssuer {
         id: user.id,
         role: user.role,
       }),
-      refreshToken: token,
+      refreshToken: rawToken,
       refreshTokenExpiresAt: expiresAt,
     };
   }

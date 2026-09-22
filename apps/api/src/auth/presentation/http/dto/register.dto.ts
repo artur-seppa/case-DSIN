@@ -1,31 +1,38 @@
+import { Transform } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { validationMessages } from '../../../../shared/validation/messages.js';
+import { PhoneNumberBR } from '../../../../shared/validation/phone-number.js';
 
 export class RegisterDto {
-  @IsString()
-  @MinLength(2)
-  @MaxLength(120)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString(validationMessages.invalid('Nome'))
+  @MinLength(2, validationMessages.minLength('Nome'))
+  @MaxLength(120, validationMessages.maxLength('Nome'))
   name: string;
 
-  @IsEmail()
-  @MaxLength(254)
+  @IsEmail({}, validationMessages.invalid('E-mail'))
+  @MaxLength(254, validationMessages.maxLength('E-mail'))
   email: string;
 
-  @IsOptional()
-  @IsString()
-  @Matches(/^[0-9()+\-\s]{8,30}$/, {
-    message: 'phone must be a valid phone number',
+  @ApiPropertyOptional({
+    example: '(11) 91234-5678',
+    description: 'Guardado no formato internacional (+5511912345678)',
   })
+  @IsOptional()
+  @PhoneNumberBR()
   phone?: string;
 
-  @IsString()
-  @MinLength(8)
-  @MaxLength(128)
+  @IsString(validationMessages.invalid('Senha'))
+  @MinLength(8, validationMessages.minLength('Senha'))
+  @MaxLength(128, validationMessages.maxLength('Senha'))
   password: string;
 }

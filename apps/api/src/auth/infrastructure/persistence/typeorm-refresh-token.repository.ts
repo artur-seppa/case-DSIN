@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { isUniqueViolation } from '../../../shared/database/unique-violation.js';
 import { RefreshToken } from '../../domain/refresh-token.entity.js';
 import { RefreshTokenRepository } from '../../domain/refresh-token.repository.js';
 
@@ -14,7 +15,16 @@ export class TypeOrmRefreshTokenRepository extends RefreshTokenRepository {
   }
 
   async insert(token: RefreshToken): Promise<void> {
-    await this.repository.insert(token);
+    try {
+      await this.repository.insert(token);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'Não foi possível concluir a autenticação. Tente novamente',
+        );
+      }
+      throw error;
+    }
   }
 
   findByTokenHash(tokenHash: string): Promise<RefreshToken | null> {

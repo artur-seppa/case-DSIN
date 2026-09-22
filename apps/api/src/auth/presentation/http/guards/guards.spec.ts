@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { FakeAccessTokenService } from '../../../../testing/auth-fakes.js';
+import { AccessTokenService } from '../../../application/ports/access-token.service.js';
 import type { AuthenticatedRequest } from '../../../../shared/auth/authenticated-user.js';
 import { Public, Roles } from '../../../../shared/auth/decorators.js';
 import { Role } from '../../../../shared/auth/role.js';
@@ -44,7 +44,21 @@ function contextFor(
 const reflector = new Reflector();
 
 describe('AccessTokenGuard', () => {
-  const guard = new AccessTokenGuard(reflector, new FakeAccessTokenService());
+  const accessTokens = {
+    verify: vi
+      .fn<AccessTokenService['verify']>()
+      .mockImplementation((token) =>
+        Promise.resolve(
+          token === 'valid-admin-token'
+            ? { id: 'USER1', role: Role.ADMIN }
+            : null,
+        ),
+      ),
+  };
+  const guard = new AccessTokenGuard(
+    reflector,
+    accessTokens as unknown as AccessTokenService,
+  );
 
   it('lets @Public() routes through without any token', async () => {
     const request = { cookies: {} };
@@ -70,7 +84,7 @@ describe('AccessTokenGuard', () => {
 
   it('accepts a valid token and attaches the user to the request', async () => {
     const request: Partial<AuthenticatedRequest> = {
-      cookies: { [ACCESS_COOKIE]: 'access:USER1:ADMIN' },
+      cookies: { [ACCESS_COOKIE]: 'valid-admin-token' },
     };
 
     await expect(

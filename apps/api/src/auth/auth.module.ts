@@ -35,7 +35,10 @@ import { RolesGuard } from './presentation/http/guards/roles.guard.js';
         secret: config.get('JWT_ACCESS_SECRET', { infer: true }),
       }),
     }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 100 }],
+      errorMessage: 'Muitas tentativas. Aguarde um instante e tente novamente.',
+    }),
   ],
   controllers: [AuthController],
   providers: [

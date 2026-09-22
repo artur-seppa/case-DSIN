@@ -1,103 +1,143 @@
-import { buildAuthScenario } from '../../../testing/auth-scenario.js';
+import { NotFoundException } from '@nestjs/common';
+import { Clock } from '../../../shared/time/clock.js';
+import { makeRefreshToken } from '../../../testing/factories/refresh-token.factory.js';
+import { makeUser } from '../../../testing/factories/user.factory.js';
+import { GetUserByIdUseCase } from '../../../users/application/use-cases/get-user-by-id.use-case.js';
 import { InvalidRefreshTokenException } from '../../domain/exceptions.js';
+import { RefreshTokenRepository } from '../../domain/refresh-token.repository.js';
+import { RefreshTokenCodec } from '../ports/refresh-token.codec.js';
+import { RefreshSessionUseCase } from './refresh-session.use-case.js';
+import { SessionIssuer, type Session } from './session-issuer.js';
 
-async function scenarioWithSession() {
-  const scenario = buildAuthScenario();
-  const session = await scenario.register.execute({
-    name: 'Maria',
-    email: 'maria@example.com',
-    password: 'senha-segura-1',
+const now = new Date('2026-09-21T12:00:00.000Z');
+
+function setup() {
+  const user = makeUser();
+  const token = makeRefreshToken({
+    userId: user.id,
+    tokenHash: 'hash-of:raw',
+    expiresAt: new Date(now.getTime() + 60_000),
   });
-  return { ...scenario, session };
+  const refreshTokens = {
+    findByTokenHash: vi
+      .fn<RefreshTokenRepository['findByTokenHash']>()
+      .mockResolvedValue(token),
+    revokeIfActive: vi
+      .fn<RefreshTokenRepository['revokeIfActive']>()
+      .mockResolvedValue(true),
+    revokeFamily: vi
+      .fn<RefreshTokenRepository['revokeFamily']>()
+      .mockResolvedValue(undefined),
+  };
+  const codec = {
+    hash: vi
+      .fn<RefreshTokenCodec['hash']>()
+      .mockImplementation((raw) => `hash-of:${raw}`),
+  };
+  const getUserById = {
+    execute: vi.fn<GetUserByIdUseCase['execute']>().mockResolvedValue(user),
+  };
+  const sessionIssuer = {
+    issue: vi
+      .fn<SessionIssuer['issue']>()
+      .mockResolvedValue({ user } as Session),
+  };
+  const clock = { now: vi.fn<Clock['now']>().mockReturnValue(now) };
+  const useCase = new RefreshSessionUseCase(
+    refreshTokens as unknown as RefreshTokenRepository,
+    codec as unknown as RefreshTokenCodec,
+    getUserById as unknown as GetUserByIdUseCase,
+    sessionIssuer as unknown as SessionIssuer,
+    clock as unknown as Clock,
+  );
+  return {
+    refreshTokens,
+    getUserById,
+    sessionIssuer,
+    clock,
+    user,
+    token,
+    useCase,
+  };
 }
 
 describe('RefreshSessionUseCase', () => {
   it('rotates the token: revokes the used one and issues a new one in the same family', async () => {
-    const { refresh, refreshTokens, session } = await scenarioWithSession();
+    const { refreshTokens, sessionIssuer, user, token, useCase } = setup();
 
-    const next = await refresh.execute(session.refreshToken);
+    const session = await useCase.execute('raw');
 
-    expect(next.refreshToken).toBe('raw-2');
-    expect(next.accessToken).toContain('access:');
-    const [first, second] = refreshTokens.byFamily(
-      [...refreshTokens.items.values()][0]!.familyId,
-    );
-    expect(first?.revokedAt).not.toBeNull();
-    expect(second?.revokedAt).toBeNull();
-  });
-
-  it('keeps the chain usable: the rotated token can be refreshed again', async () => {
-    const { refresh, session } = await scenarioWithSession();
-
-    const second = await refresh.execute(session.refreshToken);
-    const third = await refresh.execute(second.refreshToken);
-
-    expect(third.refreshToken).toBe('raw-3');
+    expect(refreshTokens.findByTokenHash).toHaveBeenCalledWith('hash-of:raw');
+    expect(refreshTokens.revokeIfActive).toHaveBeenCalledWith(token.id, now);
+    expect(sessionIssuer.issue).toHaveBeenCalledWith(user, token.familyId);
+    expect(session.user).toBe(user);
   });
 
   it('rejects a token that does not exist', async () => {
-    const { refresh } = await scenarioWithSession();
+    const { refreshTokens, sessionIssuer, useCase } = setup();
+    refreshTokens.findByTokenHash.mockResolvedValue(null);
 
-    await expect(refresh.execute('never-issued')).rejects.toBeInstanceOf(
+    await expect(useCase.execute('never-issued')).rejects.toBeInstanceOf(
+      InvalidRefreshTokenException,
+    );
+    expect(sessionIssuer.issue).not.toHaveBeenCalled();
+  });
+
+  it('rejects an expired token without revoking anything', async () => {
+    const { refreshTokens, clock, token, useCase } = setup();
+    clock.now.mockReturnValue(new Date(token.expiresAt.getTime() + 1));
+
+    await expect(useCase.execute('raw')).rejects.toBeInstanceOf(
+      InvalidRefreshTokenException,
+    );
+    expect(refreshTokens.revokeIfActive).not.toHaveBeenCalled();
+    expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+  });
+
+  it('treats a reused token as theft: revokes the whole family and issues nothing', async () => {
+    const { refreshTokens, sessionIssuer, token, useCase } = setup();
+    token.revokedAt = new Date();
+
+    await expect(useCase.execute('raw')).rejects.toBeInstanceOf(
+      InvalidRefreshTokenException,
+    );
+    expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(
+      token.familyId,
+      now,
+    );
+    expect(sessionIssuer.issue).not.toHaveBeenCalled();
+  });
+
+  it('loses the race gracefully: when another request already revoked the token, revokes the family', async () => {
+    const { refreshTokens, sessionIssuer, token, useCase } = setup();
+    refreshTokens.revokeIfActive.mockResolvedValue(false);
+
+    await expect(useCase.execute('raw')).rejects.toBeInstanceOf(
+      InvalidRefreshTokenException,
+    );
+    expect(refreshTokens.revokeFamily).toHaveBeenCalledWith(
+      token.familyId,
+      now,
+    );
+    expect(sessionIssuer.issue).not.toHaveBeenCalled();
+  });
+
+  it('answers as an invalid token when the user no longer exists', async () => {
+    const { getUserById, useCase } = setup();
+    getUserById.execute.mockRejectedValue(
+      new NotFoundException('Usuário não encontrado'),
+    );
+
+    await expect(useCase.execute('raw')).rejects.toBeInstanceOf(
       InvalidRefreshTokenException,
     );
   });
 
-  it('rejects an expired token', async () => {
-    const { refresh, clock, session } = await scenarioWithSession();
+  it('does not swallow unexpected errors', async () => {
+    const { sessionIssuer, useCase } = setup();
+    const failure = new Error('database down');
+    sessionIssuer.issue.mockRejectedValue(failure);
 
-    clock.advanceMinutes(7 * 24 * 60 + 1);
-
-    await expect(refresh.execute(session.refreshToken)).rejects.toBeInstanceOf(
-      InvalidRefreshTokenException,
-    );
-  });
-
-  it('treats a reused token as theft: revokes the whole family, including the newest token', async () => {
-    const { refresh, refreshTokens, session } = await scenarioWithSession();
-    const familyId = [...refreshTokens.items.values()][0]!.familyId;
-    const rotated = await refresh.execute(session.refreshToken);
-
-    await expect(refresh.execute(session.refreshToken)).rejects.toBeInstanceOf(
-      InvalidRefreshTokenException,
-    );
-
-    expect(refreshTokens.byFamily(familyId).every((t) => t.revokedAt)).toBe(
-      true,
-    );
-    await expect(refresh.execute(rotated.refreshToken)).rejects.toBeInstanceOf(
-      InvalidRefreshTokenException,
-    );
-  });
-
-  it('does not touch the other sessions (families) of the same user', async () => {
-    const { refresh, login, refreshTokens, session } =
-      await scenarioWithSession();
-    const otherDevice = await login.execute({
-      email: 'maria@example.com',
-      password: 'senha-segura-1',
-    });
-    await refresh.execute(session.refreshToken);
-    await refresh.execute(session.refreshToken).catch(() => undefined);
-
-    const stillActive = [...refreshTokens.items.values()].find(
-      (token) => token.tokenHash === `hash-of:${otherDevice.refreshToken}`,
-    );
-    expect(stillActive?.revokedAt).toBeNull();
-    await expect(
-      refresh.execute(otherDevice.refreshToken),
-    ).resolves.toBeDefined();
-  });
-
-  it('only one of two simultaneous refreshes with the same token wins', async () => {
-    const { refresh, session } = await scenarioWithSession();
-
-    const results = await Promise.allSettled([
-      refresh.execute(session.refreshToken),
-      refresh.execute(session.refreshToken),
-    ]);
-
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    await expect(useCase.execute('raw')).rejects.toBe(failure);
   });
 });

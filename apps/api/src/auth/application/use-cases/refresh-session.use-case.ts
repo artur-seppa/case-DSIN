@@ -1,7 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Clock } from '../../../shared/time/clock.js';
 import { GetUserByIdUseCase } from '../../../users/application/use-cases/get-user-by-id.use-case.js';
-import { UserNotFoundException } from '../../../users/domain/exceptions.js';
 import { InvalidRefreshTokenException } from '../../domain/exceptions.js';
 import { RefreshTokenRepository } from '../../domain/refresh-token.repository.js';
 import { RefreshTokenCodec } from '../ports/refresh-token.codec.js';
@@ -42,14 +41,13 @@ export class RefreshSessionUseCase {
       throw new InvalidRefreshTokenException();
     }
 
-    try {
-      const user = await this.getUserById.execute(token.userId);
-      return await this.sessionIssuer.issue(user, token.familyId);
-    } catch (error) {
-      if (error instanceof UserNotFoundException) {
-        throw new InvalidRefreshTokenException();
-      }
-      throw error;
-    }
+    const user = await this.getUserById
+      .execute(token.userId)
+      .catch((error: unknown) => {
+        throw error instanceof NotFoundException
+          ? new InvalidRefreshTokenException()
+          : error;
+      });
+    return this.sessionIssuer.issue(user, token.familyId);
   }
 }

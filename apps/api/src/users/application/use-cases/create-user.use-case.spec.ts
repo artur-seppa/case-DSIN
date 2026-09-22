@@ -1,26 +1,20 @@
 import { Role } from '../../../shared/auth/role.js';
-import {
-  FakeClock,
-  FakePasswordHasher,
-  SequentialIdGenerator,
-} from '../../../testing/fakes.js';
-import { InMemoryUserRepository } from '../../../testing/in-memory-user.repository.js';
+import { makeUser } from '../../../testing/factories/user.factory.js';
 import { EmailAlreadyInUseException } from '../../domain/exceptions.js';
+import { UserRepository } from '../../domain/user.repository.js';
 import { CreateUserUseCase } from './create-user.use-case.js';
 
-function setup(users = new InMemoryUserRepository()) {
-  const clock = new FakeClock();
-  const useCase = new CreateUserUseCase(
-    users,
-    new FakePasswordHasher(),
-    new SequentialIdGenerator(),
-    clock,
-  );
-  return { users, clock, useCase };
+function setup() {
+  const users = {
+    findByEmail: vi.fn<UserRepository['findByEmail']>().mockResolvedValue(null),
+    insert: vi.fn<UserRepository['insert']>().mockResolvedValue(undefined),
+  };
+  const useCase = new CreateUserUseCase(users as unknown as UserRepository);
+  return { users, useCase };
 }
 
 describe('CreateUserUseCase', () => {
-  it('creates a CLIENT by default and never stores the plain password', async () => {
+  it('creates a CLIENT by default and stores only the hash of the password', async () => {
     const { users, useCase } = setup();
 
     const user = await useCase.execute({
@@ -30,38 +24,27 @@ describe('CreateUserUseCase', () => {
     });
 
     expect(user.role).toBe(Role.CLIENT);
-    expect(user.passwordHash).toBe('hashed:senha-segura-1');
+    expect(user.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(user.passwordHash).not.toBe('senha-segura-1');
+    await expect(user.verifyPassword('senha-segura-1')).resolves.toBe(true);
+    await expect(user.verifyPassword('outra-senha')).resolves.toBe(false);
     expect(user).not.toHaveProperty('password');
-    expect(users.items.get(user.id)).toEqual(user);
+    expect(users.insert).toHaveBeenCalledExactlyOnceWith(user);
   });
 
-  it('takes the id from the generator and the timestamps from the clock', async () => {
-    const { clock, useCase } = setup();
-
-    const user = await useCase.execute({
-      name: 'Maria',
-      email: 'maria@example.com',
-      password: 'senha-segura-1',
-    });
-
-    expect(user.id).toBe('00000000000000000000000001');
-    expect(user.createdAt).toEqual(clock.now());
-    expect(user.updatedAt).toEqual(clock.now());
-  });
-
-  it('normalizes the email (trim + lowercase) and the optional phone', async () => {
-    const { useCase } = setup();
+  it('normalizes the email (trim + lowercase) and keeps the phone as given', async () => {
+    const { users, useCase } = setup();
 
     const user = await useCase.execute({
       name: 'Maria',
       email: '  Maria@Example.COM ',
-      phone: '(11) 99999-0000',
+      phone: '+5511999990000',
       password: 'senha-segura-1',
     });
 
     expect(user.email).toBe('maria@example.com');
-    expect(user.phone).toBe('(11) 99999-0000');
+    expect(user.phone).toBe('+5511999990000');
+    expect(users.findByEmail).toHaveBeenCalledWith('maria@example.com');
   });
 
   it('can create an ADMIN when the caller asks for it (seed only)', async () => {
@@ -77,39 +60,27 @@ describe('CreateUserUseCase', () => {
     expect(user.role).toBe(Role.ADMIN);
   });
 
-  it('rejects an email that is already in use, ignoring case', async () => {
-    const { useCase } = setup();
-    await useCase.execute({
-      name: 'Maria',
-      email: 'maria@example.com',
-      password: 'senha-segura-1',
-    });
+  it('rejects an email that is already in use without inserting', async () => {
+    const { users, useCase } = setup();
+    users.findByEmail.mockResolvedValue(makeUser());
 
     await expect(
       useCase.execute({
         name: 'Outra Maria',
-        email: 'MARIA@example.com',
+        email: 'maria@example.com',
         password: 'outra-senha-1',
       }),
     ).rejects.toBeInstanceOf(EmailAlreadyInUseException);
+    expect(users.insert).not.toHaveBeenCalled();
   });
 
   it('lets the repository reject a duplicate that slipped past the pre-check (race)', async () => {
-    class BlindRepository extends InMemoryUserRepository {
-      override findByEmail() {
-        return Promise.resolve(null);
-      }
-    }
-    const { useCase } = setup(new BlindRepository());
-    await useCase.execute({
-      name: 'Maria',
-      email: 'maria@example.com',
-      password: 'senha-segura-1',
-    });
+    const { users, useCase } = setup();
+    users.insert.mockRejectedValue(new EmailAlreadyInUseException());
 
     await expect(
       useCase.execute({
-        name: 'Maria de novo',
+        name: 'Maria',
         email: 'maria@example.com',
         password: 'senha-segura-1',
       }),

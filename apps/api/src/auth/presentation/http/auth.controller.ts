@@ -3,22 +3,30 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Post,
   Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import '@fastify/csrf-protection';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthenticatedUser } from '../../../shared/auth/authenticated-user.js';
 import { CurrentUser, Public } from '../../../shared/auth/decorators.js';
+import { Serialize } from '../../../shared/http/serialize.js';
 import { LoginUseCase } from '../../application/use-cases/login.use-case.js';
 import { LogoutUseCase } from '../../application/use-cases/logout.use-case.js';
 import { RefreshSessionUseCase } from '../../application/use-cases/refresh-session.use-case.js';
 import { RegisterUseCase } from '../../application/use-cases/register.use-case.js';
 import { InvalidRefreshTokenException } from '../../domain/exceptions.js';
+import type { User } from '../../../users/domain/user.entity.js';
 import { GetUserByIdUseCase } from '../../../users/application/use-cases/get-user-by-id.use-case.js';
 import { UserResponse } from '../../../users/presentation/http/dto/user.response.js';
 import { CsrfResponse } from './dto/csrf.response.js';
@@ -29,6 +37,7 @@ import { RegisterDto } from './dto/register.dto.js';
 const CREDENTIALS_LIMIT = { default: { limit: 10, ttl: 60_000 } };
 
 @ApiTags('auth')
+@ApiSecurity('csrf')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -53,14 +62,15 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Throttle(CREDENTIALS_LIMIT)
   @Post('register')
+  @Serialize(UserResponse, { status: HttpStatus.CREATED })
   @ApiOperation({ summary: 'Cadastra um cliente e já abre a sessão' })
   async signUp(
     @Body() body: RegisterDto,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<UserResponse> {
+  ): Promise<User> {
     const session = await this.register.execute(body);
     this.cookies.set(reply, session);
-    return UserResponse.from(session.user);
+    return session.user;
   }
 
   @Public()
@@ -68,24 +78,26 @@ export class AuthController {
   @Throttle(CREDENTIALS_LIMIT)
   @HttpCode(200)
   @Post('login')
+  @Serialize(UserResponse)
   @ApiOperation({ summary: 'Abre a sessão (cookies HttpOnly)' })
   async signIn(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<UserResponse> {
+  ): Promise<User> {
     const session = await this.login.execute(body);
     this.cookies.set(reply, session);
-    return UserResponse.from(session.user);
+    return session.user;
   }
 
   @Public()
   @HttpCode(200)
   @Post('refresh')
+  @Serialize(UserResponse)
   @ApiOperation({ summary: 'Troca o refresh token por um par novo (rotação)' })
   async renew(
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<UserResponse> {
+  ): Promise<User> {
     const rawToken = request.cookies[REFRESH_COOKIE];
     if (!rawToken) {
       throw new InvalidRefreshTokenException();
@@ -94,7 +106,7 @@ export class AuthController {
     try {
       const session = await this.refresh.execute(rawToken);
       this.cookies.set(reply, session);
-      return UserResponse.from(session.user);
+      return session.user;
     } catch (error) {
       this.cookies.clear(reply);
       throw error;
@@ -115,8 +127,9 @@ export class AuthController {
 
   @ApiCookieAuth()
   @Get('me')
+  @Serialize(UserResponse)
   @ApiOperation({ summary: 'Usuário da sessão atual' })
-  async me(@CurrentUser() actor: AuthenticatedUser): Promise<UserResponse> {
-    return UserResponse.from(await this.getUser.execute(actor.id));
+  me(@CurrentUser() actor: AuthenticatedUser): Promise<User> {
+    return this.getUser.execute(actor.id);
   }
 }

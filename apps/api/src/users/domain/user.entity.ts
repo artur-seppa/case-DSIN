@@ -1,15 +1,26 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Role } from '../../shared/auth/role.js';
+import { generateId } from '../../shared/id/generate-id.js';
+import {
+  hashPassword,
+  verifyPassword,
+} from '../../shared/security/password.js';
 
 @Entity({ name: 'users' })
 export class User {
   @PrimaryColumn({ type: 'char', length: 26 })
-  id: string;
+  id: string = generateId();
 
   @Column({ type: 'varchar', length: 120 })
   name: string;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'citext', unique: true })
   email: string;
 
   @Column({ type: 'varchar', length: 30, nullable: true })
@@ -18,26 +29,26 @@ export class User {
   @Column({ name: 'password_hash', type: 'text' })
   passwordHash: string;
 
-  @Column({ type: 'enum', enum: Role, enumName: 'user_role' })
+  @Column({
+    type: 'enum',
+    enum: Role,
+    enumName: 'user_role',
+    default: Role.CLIENT,
+  })
   role: Role;
 
-  @Column({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @Column({ name: 'updated_at', type: 'timestamptz' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
-  updateProfile(
-    changes: { name?: string; phone?: string | null },
-    now: Date,
-  ): void {
-    if (changes.name !== undefined) {
-      this.name = changes.name;
-    }
-    if (changes.phone !== undefined) {
-      this.phone = changes.phone;
-    }
-    this.updatedAt = now;
+  async setPassword(plain: string): Promise<void> {
+    this.passwordHash = await hashPassword(plain);
+  }
+
+  verifyPassword(plain: string): Promise<boolean> {
+    return verifyPassword(this.passwordHash, plain);
   }
 }
 

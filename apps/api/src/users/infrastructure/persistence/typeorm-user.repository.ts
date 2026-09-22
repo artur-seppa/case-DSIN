@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
+import { isUniqueViolation } from '../../../shared/database/unique-violation.js';
 import { EmailAlreadyInUseException } from '../../domain/exceptions.js';
 import { User } from '../../domain/user.entity.js';
 import { UserRepository } from '../../domain/user.repository.js';
-
-const UNIQUE_VIOLATION = '23505';
 
 @Injectable()
 export class TypeOrmUserRepository extends UserRepository {
@@ -34,18 +33,19 @@ export class TypeOrmUserRepository extends UserRepository {
     }
   }
 
-  async update(user: User): Promise<void> {
-    await this.repository.update(
-      { id: user.id },
-      { name: user.name, phone: user.phone, updatedAt: user.updatedAt },
-    );
+  async update(
+    id: string,
+    changes: Partial<Pick<User, 'name' | 'phone'>>,
+  ): Promise<User | null> {
+    const entity = Object.assign(new User(), { id });
+    const { affected } = await this.repository
+      .createQueryBuilder()
+      .update()
+      .set(changes)
+      .whereEntity(entity)
+      .returning('*')
+      .updateEntity(true)
+      .execute();
+    return affected ? entity : null;
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    error instanceof QueryFailedError &&
-    (error.driverError as { code?: string } | undefined)?.code ===
-      UNIQUE_VIOLATION
-  );
 }

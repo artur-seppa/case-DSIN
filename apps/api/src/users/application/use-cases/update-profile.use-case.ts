@@ -1,33 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { Clock } from '../../../shared/time/clock.js';
-import { UserNotFoundException } from '../../domain/exceptions.js';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { User } from '../../domain/user.entity.js';
 import { UserRepository } from '../../domain/user.repository.js';
 
 export interface UpdateProfileInput {
-  userId: string;
   name?: string;
   phone?: string | null;
 }
 
 @Injectable()
 export class UpdateProfileUseCase {
-  constructor(
-    private readonly users: UserRepository,
-    private readonly clock: Clock,
-  ) {}
+  constructor(private readonly users: UserRepository) {}
 
-  async execute(input: UpdateProfileInput): Promise<User> {
-    const user = await this.users.findById(input.userId);
+  async execute(userId: string, input: UpdateProfileInput): Promise<User> {
+    const user = await this.users.update(userId, input);
     if (!user) {
-      throw new UserNotFoundException();
+      throw new NotFoundException('Usuário não encontrado');
     }
-
-    user.updateProfile(
-      { name: input.name?.trim(), phone: input.phone },
-      this.clock.now(),
-    );
-    await this.users.update(user);
     return user;
   }
 }
