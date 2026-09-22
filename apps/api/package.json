@@ -15,11 +15,15 @@
     "start:prod": "node dist/main",
     "lint": "oxlint --type-aware src/",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "migration:run": "node --env-file=../../.env dist/shared/database/migrate.js",
-    "migration:revert": "node --env-file=../../.env dist/shared/database/migrate.js --revert",
+    "typeorm": "node --env-file=../../.env node_modules/typeorm/cli.js",
+    "migration:create": "pnpm typeorm migration:create",
+    "migration:generate": "pnpm typeorm migration:generate -d dist/shared/database/data-source.js -p",
+    "migration:run": "pnpm typeorm migration:run -d dist/shared/database/data-source.js -t each",
+    "migration:revert": "pnpm typeorm migration:revert -d dist/shared/database/data-source.js -t each",
     "seed": "node --env-file=../../.env dist/shared/database/seed.js"
   },
   "dependencies": {
@@ -38,6 +42,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "fastify": "5.12.4",
+    "libphonenumber-js": "1.13.13",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -45,6 +50,7 @@
     "ulidx": "^2.4.1"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/mau": "^0.2.6",
     "@nestjs/schematics": "^12.0.0",
