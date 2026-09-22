@@ -1,6 +1,5 @@
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NestFactory, Reflector } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -8,28 +7,15 @@ import {
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import type { EnvironmentVariables } from './shared/config/env.validation.js';
-import { registerHttpSecurity } from './shared/http/http-security.js';
-import { createSerializerInterceptor } from './shared/http/serializer.js';
+import { configureApp } from './shared/http/configure-app.js';
+import { attachCsrfToken } from './shared/http/swagger-csrf.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
   );
-  const config =
-    app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
-
-  await registerHttpSecurity(app, config);
-
-  app.setGlobalPrefix('api');
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-  app.useGlobalInterceptors(createSerializerInterceptor(app.get(Reflector)));
+  await configureApp(app);
   app.enableShutdownHooks();
 
   const document = SwaggerModule.createDocument(
@@ -38,10 +24,19 @@ async function bootstrap() {
       .setTitle('Cabeleleila Leila API')
       .setDescription('Sistema de agendamento online do salão')
       .setVersion('1.0')
+      .addCookieAuth('access_token')
+      .addApiKey({ type: 'apiKey', name: 'x-csrf-token', in: 'header' }, 'csrf')
       .build(),
   );
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      requestInterceptor: attachCsrfToken,
+    },
+  });
 
+  const config =
+    app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
   await app.listen(config.get('PORT', { infer: true }), '0.0.0.0');
 }
 
