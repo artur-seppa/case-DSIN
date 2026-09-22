@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module.js';
 import { validateEnv } from './shared/config/env.validation.js';
 import { DatabaseModule } from './shared/database/database.module.js';
+import { ProfessionalsModule } from './professionals/professionals.module.js';
+import { ServicesModule } from './services/services.module.js';
 import { SharedModule } from './shared/shared.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -18,6 +20,8 @@ import { UsersModule } from './users/users.module.js';
     DatabaseModule,
     UsersModule,
     AuthModule,
+    ServicesModule,
+    ProfessionalsModule,
   ],
 })
 export class AppModule {}
