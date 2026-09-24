@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { validateEnv } from './shared/config/env.validation.js';
 import { DatabaseModule } from './shared/database/database.module.js';
 import { ProfessionalsModule } from './professionals/professionals.module.js';
+import { SchedulingModule } from './scheduling/scheduling.module.js';
 import { ServicesModule } from './services/services.module.js';
 import { SharedModule } from './shared/shared.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     ServicesModule,
     ProfessionalsModule,
+    SchedulingModule,
   ],
 })
 export class AppModule {}
