@@ -34,6 +34,20 @@ describe('TypeOrmProfessionalRepository', () => {
     });
   });
 
+  it('finds several professionals by id in one batch, ignoring ids that do not exist', async () => {
+    const ana = await createProfessional(db.dataSource.manager, { name: 'Ana' });
+    const bia = await createProfessional(db.dataSource.manager, { name: 'Bia' });
+    await createProfessional(db.dataSource.manager, { name: 'Carla' });
+
+    const found = await repository.findByIds([ana.id, bia.id, makeProfessional().id]);
+
+    expect(found.map((professional) => professional.name).sort()).toEqual(['Ana', 'Bia']);
+  });
+
+  it('returns an empty array for an empty id list, without querying', async () => {
+    await expect(repository.findByIds([])).resolves.toEqual([]);
+  });
+
   it('updates the given fields and returns the updated professional', async () => {
     const professional = await createProfessional(db.dataSource.manager, {
       name: 'Ana',
@@ -243,6 +257,23 @@ describe('TypeOrmProfessionalRepository', () => {
         ]),
       ).resolves.toBeUndefined();
       expect(await repository.findWorkingHours(ghost)).toEqual([]);
+    });
+
+    it('returns the weekly schedule ordered by weekday and start time', async () => {
+      const ana = await createProfessional(db.dataSource.manager);
+      await repository.replaceWorkingHours(ana.id, [
+        makeWorkingHours({ professionalId: ana.id, weekday: 2, startTime: '09:00:00', endTime: '12:00:00' }),
+        makeWorkingHours({ professionalId: ana.id, weekday: 1, startTime: '14:00:00', endTime: '18:00:00' }),
+        makeWorkingHours({ professionalId: ana.id, weekday: 1, startTime: '09:00:00', endTime: '12:00:00' }),
+      ]);
+
+      const hours = await repository.findWorkingHours(ana.id);
+
+      expect(hours.map((h) => `${h.weekday} ${h.startTime}`)).toEqual([
+        '1 09:00:00',
+        '1 14:00:00',
+        '2 09:00:00',
+      ]);
     });
 
     it('replaces the weekly schedule of a professional only', async () => {

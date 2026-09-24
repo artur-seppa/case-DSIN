@@ -8,4 +8,5 @@ export abstract class UserRepository {
     id: string,
     changes: Partial<Pick<User, 'name' | 'phone'>>,
   ): Promise<User | null>;
+  abstract searchClientIds(query: string): Promise<string[]>;
 }

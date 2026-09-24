@@ -112,28 +112,17 @@ describe('GetProfessionalUseCase', () => {
     return { professionals, useCase };
   }
 
-  it('returns the professional with services and working hours ordered by day and time', async () => {
+  it('returns the professional with services and working hours as the repository gives them', async () => {
     const { professionals, useCase } = setup();
     const professional = makeProfessional();
+    const hours = [
+      makeWorkingHours({ professionalId: professional.id, weekday: 1, startTime: '09:00:00' }),
+      makeWorkingHours({ professionalId: professional.id, weekday: 1, startTime: '14:00:00' }),
+      makeWorkingHours({ professionalId: professional.id, weekday: 2, startTime: '09:00:00' }),
+    ];
     professionals.findById.mockResolvedValue(professional);
     professionals.findServiceIds.mockResolvedValue(['S1', 'S2']);
-    professionals.findWorkingHours.mockResolvedValue([
-      makeWorkingHours({
-        professionalId: professional.id,
-        weekday: 2,
-        startTime: '09:00:00',
-      }),
-      makeWorkingHours({
-        professionalId: professional.id,
-        weekday: 1,
-        startTime: '14:00:00',
-      }),
-      makeWorkingHours({
-        professionalId: professional.id,
-        weekday: 1,
-        startTime: '09:00:00',
-      }),
-    ]);
+    professionals.findWorkingHours.mockResolvedValue(hours);
 
     const detail = await useCase.execute({
       professionalId: professional.id,
@@ -142,9 +131,7 @@ describe('GetProfessionalUseCase', () => {
 
     expect(detail.professional).toBe(professional);
     expect(detail.serviceIds).toEqual(['S1', 'S2']);
-    expect(
-      detail.workingHours.map((h) => `${h.weekday} ${h.startTime}`),
-    ).toEqual(['1 09:00:00', '1 14:00:00', '2 09:00:00']);
+    expect(detail.workingHours).toBe(hours);
   });
 
   it('hides an inactive professional unless inactive ones are allowed', async () => {

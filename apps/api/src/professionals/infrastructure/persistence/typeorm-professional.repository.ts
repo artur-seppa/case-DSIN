@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { offsetOf, type PageRequest } from '../../../shared/pagination/page.js';
 import { Professional } from '../../domain/professional.entity.js';
 import { ProfessionalRepository } from '../../domain/professional.repository.js';
@@ -18,6 +18,13 @@ export class TypeOrmProfessionalRepository extends ProfessionalRepository {
 
   findById(id: string): Promise<Professional | null> {
     return this.repository.findOneBy({ id });
+  }
+
+  findByIds(ids: string[]): Promise<Professional[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.repository.findBy({ id: In(ids) });
   }
 
   async list(
@@ -94,6 +101,17 @@ export class TypeOrmProfessionalRepository extends ProfessionalRepository {
   findWorkingHours(professionalId: string): Promise<WorkingHours[]> {
     return this.repository.manager.find(WorkingHours, {
       where: { professionalId },
+      order: { weekday: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  findWorkingHoursByIds(professionalIds: string[]): Promise<WorkingHours[]> {
+    if (professionalIds.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.repository.manager.find(WorkingHours, {
+      where: { professionalId: In(professionalIds) },
+      order: { weekday: 'ASC', startTime: 'ASC' },
     });
   }
 

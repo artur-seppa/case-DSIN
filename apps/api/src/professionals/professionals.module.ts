@@ -32,5 +32,6 @@ import { ProfessionalsController } from './presentation/http/professionals.contr
     SetProfessionalServicesUseCase,
     SetProfessionalWorkingHoursUseCase,
   ],
+  exports: [ProfessionalRepository],
 })
 export class ProfessionalsModule {}

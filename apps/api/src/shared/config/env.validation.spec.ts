@@ -16,6 +16,19 @@ describe('validateEnv', () => {
     expect(env.COOKIE_SECURE).toBe(false);
     expect(env.ACCESS_TOKEN_TTL_MINUTES).toBe(15);
     expect(env.REFRESH_TOKEN_TTL_DAYS).toBe(7);
+    expect(env.SALON_UTC_OFFSET_HOURS).toBe(-3);
+  });
+
+  it('accepts another valid UTC offset', () => {
+    const env = validateEnv({ ...validEnv, SALON_UTC_OFFSET_HOURS: '0' });
+
+    expect(env.SALON_UTC_OFFSET_HOURS).toBe(0);
+  });
+
+  it('rejects a SALON_UTC_OFFSET_HOURS outside the valid range', () => {
+    expect(() =>
+      validateEnv({ ...validEnv, SALON_UTC_OFFSET_HOURS: '20' }),
+    ).toThrow(/SALON_UTC_OFFSET_HOURS/);
   });
 
   it('coerces PORT from string to number', () => {

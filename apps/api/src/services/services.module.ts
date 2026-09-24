@@ -19,6 +19,6 @@ import { ServicesController } from './presentation/http/services.controller.js';
     ListServicesUseCase,
     FindServicesByIdsUseCase,
   ],
-  exports: [FindServicesByIdsUseCase],
+  exports: [FindServicesByIdsUseCase, ServiceRepository],
 })
 export class ServicesModule {}

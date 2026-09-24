@@ -19,6 +19,6 @@ import { UsersController } from './presentation/http/users.controller.js';
     FindUserByEmailUseCase,
     UpdateProfileUseCase,
   ],
-  exports: [CreateUserUseCase, GetUserByIdUseCase, FindUserByEmailUseCase],
+  exports: [CreateUserUseCase, GetUserByIdUseCase, FindUserByEmailUseCase, UserRepository],
 })
 export class UsersModule {}

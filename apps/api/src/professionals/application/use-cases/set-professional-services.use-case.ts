@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { FindServicesByIdsUseCase } from '../../../services/application/use-cases/find-services-by-ids.use-case.js';
 import { ServicesNotFoundException } from '../../domain/exceptions.js';
 import { ProfessionalRepository } from '../../domain/professional.repository.js';
-import { sortWorkingHours } from '../../domain/working-hours.policy.js';
 import type { ProfessionalDetail } from './get-professional.use-case.js';
 
 @Injectable()
@@ -42,7 +41,7 @@ export class SetProfessionalServicesUseCase {
     return {
       professional,
       serviceIds: serviceIds.sort(),
-      workingHours: sortWorkingHours(workingHours),
+      workingHours,
     };
   }
 }

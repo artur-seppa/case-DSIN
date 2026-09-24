@@ -55,6 +55,11 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(1)
   REFRESH_TOKEN_TTL_DAYS: number = 7;
+
+  @IsInt()
+  @Min(-12)
+  @Max(14)
+  SALON_UTC_OFFSET_HOURS: number = -3;
 }
 
 export function validateEnv(

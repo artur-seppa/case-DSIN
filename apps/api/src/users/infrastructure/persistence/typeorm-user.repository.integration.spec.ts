@@ -124,4 +124,23 @@ describe('TypeOrmUserRepository', () => {
     expect(updated?.createdAt.toISOString()).toBe('2026-01-01T00:00:00.000Z');
     expect(updated?.updatedAt.getTime()).toBeGreaterThan(Date.now() - 60_000);
   });
+
+  it('searches clients by a name/e-mail substring', async () => {
+    const match = await createUser(db.dataSource.manager, { name: 'Maria Silva' });
+    await createUser(db.dataSource.manager, { name: 'João Souza' });
+
+    const ids = await repository.searchClientIds('maria');
+
+    expect(ids).toEqual([match.id]);
+  });
+
+  it('treats an underscore in the search term as a literal character, not a LIKE wildcard', async () => {
+    // Unescaped, "a_a" would match "ana" (any single char between the a's).
+    const other = await createUser(db.dataSource.manager, { name: 'Ana Beatriz' });
+
+    const ids = await repository.searchClientIds('a_a');
+
+    expect(ids).toEqual([]);
+    expect(ids).not.toContain(other.id);
+  });
 });

@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Professional } from '../../domain/professional.entity.js';
 import { ProfessionalRepository } from '../../domain/professional.repository.js';
 import type { WorkingHours } from '../../domain/working-hours.entity.js';
-import { sortWorkingHours } from '../../domain/working-hours.policy.js';
 
 export interface ProfessionalDetail {
   professional: Professional;
@@ -33,7 +32,7 @@ export class GetProfessionalUseCase {
     return {
       professional,
       serviceIds,
-      workingHours: sortWorkingHours(workingHours),
+      workingHours,
     };
   }
 }

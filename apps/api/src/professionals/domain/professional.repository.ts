@@ -4,6 +4,7 @@ import type { WorkingHours } from './working-hours.entity.js';
 
 export abstract class ProfessionalRepository {
   abstract findById(id: string): Promise<Professional | null>;
+  abstract findByIds(ids: string[]): Promise<Professional[]>;
   abstract list(
     filter: { includeInactive: boolean; serviceId?: string },
     page: PageRequest,
@@ -19,6 +20,7 @@ export abstract class ProfessionalRepository {
     serviceIds: string[],
   ): Promise<void>;
   abstract findWorkingHours(professionalId: string): Promise<WorkingHours[]>;
+  abstract findWorkingHoursByIds(professionalIds: string[]): Promise<WorkingHours[]>;
   abstract replaceWorkingHours(
     professionalId: string,
     hours: WorkingHours[],
