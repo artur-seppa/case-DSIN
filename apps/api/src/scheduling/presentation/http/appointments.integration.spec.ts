@@ -379,6 +379,29 @@ describe('Appointments', () => {
       expect(response.status).toBe(200);
       expect(response.body.total).toBe(1);
     });
+
+    it('sorts by startsAt ascending, the query the web client sends for its "upcoming" tab', async () => {
+      const soon = futureLocalSlot(3, 10);
+      await client.post('/appointments', {
+        startsAt: soon.startsAt.toISOString(),
+        items: [{ serviceId, professionalId }],
+      });
+      const later = futureLocalSlot(5, 10);
+      await client.post('/appointments', {
+        startsAt: later.startsAt.toISOString(),
+        items: [{ serviceId, professionalId }],
+      });
+
+      const response = await client.get(
+        '/appointments?page=1&limit=10&itemStatus=PENDING&itemStatus=CONFIRMED&itemStatus=IN_PROGRESS&sort=startsAt&order=asc',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.total).toBe(2);
+      expect(new Date(response.body.items[0].startsAt).getTime()).toBeLessThan(
+        new Date(response.body.items[1].startsAt).getTime(),
+      );
+    });
   });
 
   describe('availability and config', () => {

@@ -12,6 +12,9 @@ export interface AppointmentAggregate {
   items: AppointmentItem[];
   status: AppointmentStatus;
   totalCents: number;
+  startsAt: Date;
+  endsAt: Date;
+  activeStartsAt: Date | null;
 }
 
 export interface ItemUpdate {

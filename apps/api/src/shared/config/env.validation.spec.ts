@@ -2,6 +2,7 @@ import { NodeEnv, validateEnv } from './env.validation.js';
 
 const validEnv = {
   DATABASE_URL: 'postgresql://DSIN:DSIN@localhost:5432/DSIN',
+  REDIS_URL: 'redis://localhost:6379',
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   COOKIE_SECRET: 'b'.repeat(32),
 };
@@ -59,6 +60,21 @@ describe('validateEnv', () => {
         DATABASE_URL: 'mysql://localhost:3306/DSIN',
       }),
     ).toThrow(/DATABASE_URL/);
+  });
+
+  it('fails at boot when REDIS_URL is missing', () => {
+    const { REDIS_URL: _omitted, ...rest } = validEnv;
+
+    expect(() => validateEnv(rest)).toThrow(/REDIS_URL/);
+  });
+
+  it('rejects a REDIS_URL that is not a redis url', () => {
+    expect(() =>
+      validateEnv({
+        ...validEnv,
+        REDIS_URL: 'postgresql://localhost:5432/DSIN',
+      }),
+    ).toThrow(/REDIS_URL/);
   });
 
   it('rejects a PORT outside the valid range', () => {

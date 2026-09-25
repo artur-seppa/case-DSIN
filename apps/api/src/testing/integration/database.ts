@@ -71,6 +71,7 @@ export async function resetDatabase(dataSource: DataSource): Promise<void> {
     throw new Error('Refusing to truncate a database that is not a test one');
   }
   const tables = dataSource.entityMetadatas
+    .filter((metadata) => metadata.tableType !== 'view')
     .map((metadata) => `"${metadata.tableName}"`)
     .join(', ');
   await dataSource.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);

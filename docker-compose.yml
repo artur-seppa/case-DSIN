@@ -1,7 +1,5 @@
 name: DSIN
 
-# Infraestrutura de desenvolvimento. Os servicos api, worker, migrate e web
-# entram aqui quando forem criados.
 services:
   postgres:
     image: postgres:17-alpine

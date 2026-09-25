@@ -74,9 +74,20 @@ function withRelations(item: AppointmentItem): AppointmentItem {
 function aggregate(
   appointment: Appointment,
   items: AppointmentItem[],
-  overrides: Partial<Pick<AppointmentAggregate, 'status' | 'totalCents'>> = {},
+  overrides: Partial<
+    Pick<AppointmentAggregate, 'status' | 'totalCents' | 'startsAt' | 'endsAt' | 'activeStartsAt'>
+  > = {},
 ): AppointmentAggregate {
-  return { appointment, items, status: AppointmentStatus.PENDING, totalCents: 0, ...overrides };
+  return {
+    appointment,
+    items,
+    status: AppointmentStatus.PENDING,
+    totalCents: 0,
+    startsAt: new Date('2026-10-01T15:00:00Z'),
+    endsAt: new Date('2026-10-01T16:00:00Z'),
+    activeStartsAt: new Date('2026-10-01T15:00:00Z'),
+    ...overrides,
+  };
 }
 
 function makeAssembler() {
@@ -127,41 +138,27 @@ describe('AppointmentDetailAssembler', () => {
     expect(detail.items[0]!.professional).toEqual({ id: 'P1', name: 'Bia' });
   });
 
-  it('excludes cancelled items when computing the overall startsAt/endsAt', () => {
+  it('passes the repository-derived startsAt/endsAt through unchanged', () => {
     const { assembler } = makeAssembler();
     const appointment = makeAppointment({ clientId: CLIENT_ID, client: CLIENT_RELATION });
     const items = [
       withRelations(
-        makeAppointmentItem({
-          appointmentId: appointment.id,
-          serviceId: 'S1',
-          professionalId: 'P1',
-          status: ItemStatus.CANCELLED,
-          startsAt: new Date('2026-10-01T13:00:00Z'),
-          endsAt: new Date('2026-10-01T13:30:00Z'),
-        }),
-      ),
-      withRelations(
-        makeAppointmentItem({
-          appointmentId: appointment.id,
-          serviceId: 'S1',
-          professionalId: 'P1',
-          status: ItemStatus.CONFIRMED,
-          startsAt: new Date('2026-10-01T15:00:00Z'),
-          endsAt: new Date('2026-10-01T16:00:00Z'),
-        }),
+        makeAppointmentItem({ appointmentId: appointment.id, serviceId: 'S1', professionalId: 'P1' }),
       ),
     ];
 
     const detail = assembler.assemble(
-      aggregate(appointment, items, { status: AppointmentStatus.CONFIRMED, totalCents: 5000 }),
+      aggregate(appointment, items, {
+        startsAt: new Date('2026-10-01T15:00:00Z'),
+        endsAt: new Date('2026-10-01T16:00:00Z'),
+      }),
     );
 
     expect(detail.startsAt).toEqual(new Date('2026-10-01T15:00:00Z'));
     expect(detail.endsAt).toEqual(new Date('2026-10-01T16:00:00Z'));
   });
 
-  it('has no change deadline once every item is cancelled', () => {
+  it('has no change deadline once activeStartsAt is null (every item cancelled)', () => {
     const { assembler } = makeAssembler();
     const appointment = makeAppointment({ clientId: CLIENT_ID, client: CLIENT_RELATION });
     const items = [
@@ -176,7 +173,11 @@ describe('AppointmentDetailAssembler', () => {
     ];
 
     const detail = assembler.assemble(
-      aggregate(appointment, items, { status: AppointmentStatus.CANCELLED, totalCents: 0 }),
+      aggregate(appointment, items, {
+        status: AppointmentStatus.CANCELLED,
+        totalCents: 0,
+        activeStartsAt: null,
+      }),
     );
 
     expect(detail.changeDeadline).toBeNull();

@@ -3,7 +3,6 @@ import { Clock } from '../../shared/time/clock.js';
 import type { AppointmentStatus } from '../domain/appointment-status.js';
 import type { AppointmentAggregate } from '../domain/appointment.repository.js';
 import { canClientChange, changeDeadline } from '../domain/rules/change-window.policy.js';
-import { firstActiveItem } from '../domain/rules/item-collision.js';
 import { ItemStatus } from '../domain/rules/item-status.js';
 import { SchedulingSettings } from './ports/scheduling-settings.js';
 
@@ -45,14 +44,10 @@ export class AppointmentDetailAssembler {
   assembleMany(aggregates: AppointmentAggregate[]): AppointmentDetail[] {
     const now = this.clock.now();
 
-    return aggregates.map(({ appointment, items, status, totalCents }) => {
+    return aggregates.map(({ appointment, items, status, totalCents, startsAt, endsAt, activeStartsAt }) => {
       if (!appointment.client) {
         throw new Error(`Cliente não carregado para a ordem ${appointment.id}`);
       }
-
-      const firstActive = firstActiveItem(items);
-      const activeItems = items.filter((item) => item.status !== ItemStatus.CANCELLED);
-      const timeSource = activeItems.length > 0 ? activeItems : items;
 
       return {
         id: appointment.id,
@@ -64,14 +59,14 @@ export class AppointmentDetailAssembler {
         status,
         notes: appointment.notes,
         createdAt: appointment.createdAt,
-        startsAt: timeSource.reduce((min, item) => (item.startsAt < min ? item.startsAt : min), timeSource[0]!.startsAt),
-        endsAt: timeSource.reduce((max, item) => (item.endsAt > max ? item.endsAt : max), timeSource[0]!.endsAt),
+        startsAt,
+        endsAt,
         totalCents,
-        changeDeadline: firstActive
-          ? changeDeadline(firstActive.startsAt, this.settings.changeWindowHours)
+        changeDeadline: activeStartsAt
+          ? changeDeadline(activeStartsAt, this.settings.changeWindowHours)
           : null,
-        canClientChange: firstActive
-          ? canClientChange(now, firstActive.startsAt, this.settings.changeWindowHours)
+        canClientChange: activeStartsAt
+          ? canClientChange(now, activeStartsAt, this.settings.changeWindowHours)
           : false,
         items: items.map((item) => {
           if (!item.service || !item.professional) {

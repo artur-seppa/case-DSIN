@@ -80,6 +80,19 @@ export function localDaysBetween(
   return Math.round((toUtc - fromUtc) / 86_400_000);
 }
 
+export function addDaysToLocalDate(
+  date: Pick<LocalDateTime, 'year' | 'month' | 'day'>,
+  days: number,
+): Pick<LocalDateTime, 'year' | 'month' | 'day'> {
+  const utcMs = Date.UTC(date.year, date.month - 1, date.day) + days * 86_400_000;
+  const shifted = new Date(utcMs);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
 export function localDateKey(
   parts: Pick<LocalDateTime, 'year' | 'month' | 'day'>,
 ): string {

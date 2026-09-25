@@ -25,6 +25,7 @@ import { ResolveAppointmentItemsUseCase } from './application/use-cases/resolve-
 import { AppointmentHistoryEntry } from './domain/entities/appointment-history.entity.js';
 import { AppointmentItem } from './domain/entities/appointment-item.entity.js';
 import { Appointment } from './domain/entities/appointment.entity.js';
+import { AppointmentSummaryView } from './domain/entities/appointment-summary.entity.js';
 import { AppointmentRepository } from './domain/appointment.repository.js';
 import { OutboxEvent } from './domain/entities/outbox-event.entity.js';
 import { ConfigSchedulingSettings } from './infrastructure/config/config-scheduling-settings.js';
@@ -38,7 +39,13 @@ import { ConfigController } from './presentation/http/config.controller.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Appointment, AppointmentItem, AppointmentHistoryEntry, OutboxEvent]),
+    TypeOrmModule.forFeature([
+      Appointment,
+      AppointmentItem,
+      AppointmentHistoryEntry,
+      OutboxEvent,
+      AppointmentSummaryView,
+    ]),
     ProfessionalsModule,
     ServicesModule,
     UsersModule,
@@ -66,5 +73,6 @@ import { ConfigController } from './presentation/http/config.controller.js';
     CancelItemUseCase,
     GetConfigUseCase,
   ],
+  exports: [SchedulingSettings],
 })
 export class SchedulingModule {}

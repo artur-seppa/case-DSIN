@@ -35,6 +35,13 @@ export class EnvironmentVariables {
   DATABASE_URL: string;
 
   @IsString()
+  @IsNotEmpty()
+  @Matches(/^redis:\/\/.+/, {
+    message: 'REDIS_URL must be a redis connection url',
+  })
+  REDIS_URL: string;
+
+  @IsString()
   @MinLength(32)
   JWT_ACCESS_SECRET: string;
 

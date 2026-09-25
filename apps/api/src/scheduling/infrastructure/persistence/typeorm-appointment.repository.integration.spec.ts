@@ -97,6 +97,54 @@ describe('TypeOrmAppointmentRepository', () => {
     });
   });
 
+  describe('derived startsAt/endsAt/activeStartsAt', () => {
+    it('excludes cancelled items from the display range and from activeStartsAt', async () => {
+      const appointment = await createAppointment(db.dataSource.manager, { clientId });
+      await db.dataSource.manager.transaction(async (manager) => {
+        await createAppointmentItem(manager, {
+          appointmentId: appointment.id,
+          serviceId,
+          professionalId,
+          status: ItemStatus.CANCELLED,
+          startsAt: new Date('2026-10-01T09:00:00Z'),
+          endsAt: new Date('2026-10-01T09:30:00Z'),
+        });
+        await createAppointmentItem(manager, {
+          appointmentId: appointment.id,
+          serviceId,
+          professionalId,
+          status: ItemStatus.CONFIRMED,
+          startsAt: new Date('2026-10-01T15:00:00Z'),
+          endsAt: new Date('2026-10-01T16:00:00Z'),
+        });
+      });
+
+      const aggregate = await repository.findById(appointment.id);
+
+      expect(aggregate!.startsAt).toEqual(new Date('2026-10-01T15:00:00Z'));
+      expect(aggregate!.endsAt).toEqual(new Date('2026-10-01T16:00:00Z'));
+      expect(aggregate!.activeStartsAt).toEqual(new Date('2026-10-01T15:00:00Z'));
+    });
+
+    it('falls back to the full item range and has no activeStartsAt when every item is cancelled', async () => {
+      const appointment = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: appointment.id,
+        serviceId,
+        professionalId,
+        status: ItemStatus.CANCELLED,
+        startsAt: new Date('2026-10-01T09:00:00Z'),
+        endsAt: new Date('2026-10-01T09:30:00Z'),
+      });
+
+      const aggregate = await repository.findById(appointment.id);
+
+      expect(aggregate!.startsAt).toEqual(new Date('2026-10-01T09:00:00Z'));
+      expect(aggregate!.endsAt).toEqual(new Date('2026-10-01T09:30:00Z'));
+      expect(aggregate!.activeStartsAt).toBeNull();
+    });
+  });
+
   describe('list filtering by date range', () => {
     it('bounds from/to by the salon-local calendar day, not raw UTC midnight', async () => {
       const UTC_OFFSET_MINUTES = -180;
@@ -133,6 +181,94 @@ describe('TypeOrmAppointmentRepository', () => {
 
       expect(total).toBe(1);
       expect(items[0]!.appointment.id).toBe(withinLocalDay.id);
+    });
+  });
+
+  describe('list sorting by startsAt', () => {
+    it('orders by the earliest active item start time, not appointment.createdAt', async () => {
+      const soonest = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: soonest.id,
+        serviceId,
+        professionalId,
+        startsAt: new Date('2026-10-01T09:00:00Z'),
+        endsAt: new Date('2026-10-01T10:00:00Z'),
+      });
+      const latest = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: latest.id,
+        serviceId,
+        professionalId,
+        startsAt: new Date('2026-10-03T09:00:00Z'),
+        endsAt: new Date('2026-10-03T10:00:00Z'),
+      });
+      const middle = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: middle.id,
+        serviceId,
+        professionalId,
+        startsAt: new Date('2026-10-02T09:00:00Z'),
+        endsAt: new Date('2026-10-02T10:00:00Z'),
+      });
+
+      const { items } = await repository.list(
+        { sort: 'startsAt', order: 'asc' },
+        { page: 1, limit: 20 },
+      );
+
+      expect(items.map((item) => item.appointment.id)).toEqual([soonest.id, middle.id, latest.id]);
+    });
+
+    it('ignores cancelled items when picking the sort time, unless every item is cancelled', async () => {
+      const cancelledFirstThenActiveLater = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: cancelledFirstThenActiveLater.id,
+        serviceId,
+        professionalId,
+        status: ItemStatus.CANCELLED,
+        startsAt: new Date('2026-10-01T09:00:00Z'),
+        endsAt: new Date('2026-10-01T10:00:00Z'),
+      });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: cancelledFirstThenActiveLater.id,
+        serviceId,
+        professionalId,
+        status: ItemStatus.CONFIRMED,
+        startsAt: new Date('2026-10-05T09:00:00Z'),
+        endsAt: new Date('2026-10-05T10:00:00Z'),
+      });
+      const activeEarlier = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: activeEarlier.id,
+        serviceId,
+        professionalId,
+        status: ItemStatus.CONFIRMED,
+        startsAt: new Date('2026-10-02T09:00:00Z'),
+        endsAt: new Date('2026-10-02T10:00:00Z'),
+      });
+      const fullyCancelled = await createAppointment(db.dataSource.manager, { clientId });
+      await createAppointmentItem(db.dataSource.manager, {
+        appointmentId: fullyCancelled.id,
+        serviceId,
+        professionalId,
+        status: ItemStatus.CANCELLED,
+        startsAt: new Date('2026-10-03T09:00:00Z'),
+        endsAt: new Date('2026-10-03T10:00:00Z'),
+      });
+
+      const { items } = await repository.list(
+        { sort: 'startsAt', order: 'asc' },
+        { page: 1, limit: 20 },
+      );
+
+      // activeEarlier's only active item starts 10/02; cancelledFirstThenActiveLater's
+      // active item starts 10/05 (its cancelled 10/01 item is ignored); fullyCancelled
+      // falls back to its single cancelled item's 10/03 start since none are active.
+      expect(items.map((item) => item.appointment.id)).toEqual([
+        activeEarlier.id,
+        fullyCancelled.id,
+        cancelledFirstThenActiveLater.id,
+      ]);
     });
   });
 });

@@ -1,0 +1,45 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/inter";
+
+@theme {
+  --color-bg-page: #fbf7f3;
+  --color-bg-surface: #ffffff;
+  --color-text-primary: #241a15;
+  --color-text-secondary: #5c4a3f;
+  --color-border: #e4d9cf;
+
+  --color-accent-700: #8a3418;
+  --color-accent-500: #e2582b;
+  --color-accent-100: #fbe4d8;
+
+  --color-success-700: #175934;
+  --color-error-700: #9e241d;
+  --color-info-700: #1b4e8a;
+  --color-warning-bg: #fceacb;
+  --color-warning-800: #5a3d0d;
+
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.15;
+  --text-h1: 1.875rem;
+  --text-h1--line-height: 1.2;
+  --text-h2: 1.5rem;
+  --text-h2--line-height: 1.25;
+  --text-h3: 1.25rem;
+  --text-h3--line-height: 1.3;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.5;
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.4;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
+}

@@ -1,0 +1,15 @@
+export const reportsLabels = {
+  dashboardTitle: 'Painel',
+  revenue: 'Faturamento',
+  completed: 'Atendimentos',
+  created: 'Agendamentos criados',
+  cancellationRate: 'Taxa de cancelamento',
+  noShowRate: 'Taxa de faltas',
+  revenueByWeekdayTitle: 'Faturamento por dia',
+  serviceRankingTitle: 'Serviços mais realizados',
+  serviceRankingEmpty: 'Nenhum serviço concluído nesta semana',
+  occupancyTitle: 'Ocupação por profissional',
+  occupancyNoSchedule: 'Sem expediente configurado',
+  previousWeek: 'Semana anterior',
+  nextWeek: 'Próxima semana',
+};

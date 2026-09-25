@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { isExclusionViolation } from '../../../shared/database/exclusion-violation.js';
 import { offsetOf, type PageRequest } from '../../../shared/pagination/page.js';
 import {
@@ -14,25 +14,11 @@ import {
 import { AppointmentHistoryEntry } from '../../domain/entities/appointment-history.entity.js';
 import { AppointmentItem } from '../../domain/entities/appointment-item.entity.js';
 import { Appointment } from '../../domain/entities/appointment.entity.js';
+import { AppointmentSummaryView } from '../../domain/entities/appointment-summary.entity.js';
 import { SlotTakenException } from '../../domain/exceptions.js';
 import { OutboxEvent } from '../../domain/entities/outbox-event.entity.js';
-import { AppointmentStatus } from '../../domain/appointment-status.js';
 
-const STATUS_CASE_SQL = `CASE
-    WHEN COUNT(*) FILTER (WHERE status <> 'CANCELLED') = 0 THEN 'CANCELLED'
-    WHEN COUNT(*) FILTER (WHERE status = 'PENDING') > 0 THEN 'PENDING'
-    WHEN COUNT(*) FILTER (WHERE status NOT IN ('CANCELLED', 'COMPLETED', 'NO_SHOW')) = 0 THEN 'FINISHED'
-    WHEN COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') > 0
-      OR (COUNT(*) FILTER (WHERE status IN ('COMPLETED', 'NO_SHOW')) > 0
-          AND COUNT(*) FILTER (WHERE status = 'CONFIRMED') > 0) THEN 'IN_PROGRESS'
-    ELSE 'CONFIRMED'
-  END`;
-const TOTAL_CENTS_SQL = `COALESCE(SUM(price_cents) FILTER (WHERE status <> 'CANCELLED'), 0)::int`;
-
-interface AppointmentSummary {
-  status: AppointmentStatus;
-  totalCents: number;
-}
+type AppointmentSummary = Omit<AppointmentSummaryView, 'appointmentId'>;
 
 @Injectable()
 export class TypeOrmAppointmentRepository extends AppointmentRepository {
@@ -81,13 +67,21 @@ export class TypeOrmAppointmentRepository extends AppointmentRepository {
     filter: AppointmentFilter,
     page: PageRequest,
   ): Promise<{ items: AppointmentAggregate[]; total: number }> {
+    const direction = filter.order === 'asc' ? 'ASC' : 'DESC';
     const qb = this.repository
       .createQueryBuilder('appointment')
       .leftJoinAndSelect('appointment.client', 'client')
-      .orderBy(`appointment.${filter.sort ?? 'createdAt'}`, filter.order === 'asc' ? 'ASC' : 'DESC')
-      .addOrderBy('appointment.id', 'ASC')
       .skip(offsetOf(page))
       .take(page.limit);
+
+    if (filter.sort === 'startsAt') {
+      qb.leftJoin(AppointmentSummaryView, 'summary', 'summary.appointmentId = appointment.id')
+        .addSelect('summary.startsAt')
+        .orderBy('summary.startsAt', direction)
+        .addOrderBy('appointment.id', 'ASC');
+    } else {
+      qb.orderBy('appointment.createdAt', direction).addOrderBy('appointment.id', 'ASC');
+    }
 
     if (filter.clientId) {
       qb.andWhere('appointment.clientId = :clientId', { clientId: filter.clientId });
@@ -134,7 +128,7 @@ export class TypeOrmAppointmentRepository extends AppointmentRepository {
       Promise.all(
         appointments.map((appointment) => this.itemsOf(this.repository.manager, appointment.id)),
       ),
-      this.statusesAndTotalsOf(this.repository.manager, appointmentIds),
+      this.summariesOf(this.repository.manager, appointmentIds),
     ]);
     return {
       items: appointments.map((appointment, index) => {
@@ -282,7 +276,7 @@ export class TypeOrmAppointmentRepository extends AppointmentRepository {
   ): Promise<AppointmentAggregate> {
     const [items, summary] = await Promise.all([
       this.itemsOf(manager, appointment.id),
-      this.statusAndTotalOf(manager, appointment.id),
+      this.summaryOf(manager, appointment.id),
     ]);
     return { appointment, items, ...summary };
   }
@@ -295,36 +289,35 @@ export class TypeOrmAppointmentRepository extends AppointmentRepository {
     });
   }
 
-  private async statusAndTotalOf(
+  private async summaryOf(
     manager: EntityManager,
     appointmentId: string,
   ): Promise<AppointmentSummary> {
-    const rows: { status: AppointmentStatus; total_cents: number }[] = await manager.query(
-      `SELECT ${STATUS_CASE_SQL} AS status, ${TOTAL_CENTS_SQL} AS total_cents
-       FROM appointment_items
-       WHERE appointment_id = $1`,
-      [appointmentId],
-    );
-    return { status: rows[0]!.status, totalCents: rows[0]!.total_cents };
+    const view = await manager.findOne(AppointmentSummaryView, { where: { appointmentId } });
+    if (!view) {
+      throw new Error(`Nenhum item encontrado para a ordem ${appointmentId}`);
+    }
+    return {
+      status: view.status,
+      totalCents: view.totalCents,
+      startsAt: view.startsAt,
+      endsAt: view.endsAt,
+      activeStartsAt: view.activeStartsAt,
+    };
   }
 
-  private async statusesAndTotalsOf(
+  private async summariesOf(
     manager: EntityManager,
     appointmentIds: string[],
   ): Promise<Map<string, AppointmentSummary>> {
     if (appointmentIds.length === 0) {
       return new Map();
     }
-    const rows: { appointment_id: string; status: AppointmentStatus; total_cents: number }[] =
-      await manager.query(
-        `SELECT appointment_id, ${STATUS_CASE_SQL} AS status, ${TOTAL_CENTS_SQL} AS total_cents
-         FROM appointment_items
-         WHERE appointment_id = ANY($1)
-         GROUP BY appointment_id`,
-        [appointmentIds],
-      );
+    const views = await manager.find(AppointmentSummaryView, {
+      where: { appointmentId: In(appointmentIds) },
+    });
     return new Map(
-      rows.map((row) => [row.appointment_id, { status: row.status, totalCents: row.total_cents }]),
+      views.map(({ appointmentId, ...summary }) => [appointmentId, summary]),
     );
   }
 

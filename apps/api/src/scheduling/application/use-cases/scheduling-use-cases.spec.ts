@@ -160,6 +160,9 @@ describe('CreateAppointmentUseCase', () => {
           items,
           status: AppointmentStatus.PENDING,
           totalCents: items.reduce((sum, item) => sum + item.priceCents, 0),
+          startsAt: items.reduce((min, item) => (item.startsAt < min ? item.startsAt : min), items[0]!.startsAt),
+          endsAt: items.reduce((max, item) => (item.endsAt > max ? item.endsAt : max), items[0]!.endsAt),
+          activeStartsAt: items.reduce((min, item) => (item.startsAt < min ? item.startsAt : min), items[0]!.startsAt),
         })),
     };
     const professionals = {
