@@ -29,8 +29,6 @@ Por causa do prazo, alguns itens do escopo original não entraram nesta entrega:
 
 O documento de design completo (escopo, regras de negócio, modelo de dados, concorrência, API, frontend, decisões de arquitetura) está em [`docs/design.pdf`](docs/design.pdf).
 
-> PDF do documento de design: **a adicionar em `docs/design.pdf`** (link ficará aqui após a exportação).
-
 ## Prints e vídeo
 
 Prints organizados por perfil em `docs/screenshots/`.
